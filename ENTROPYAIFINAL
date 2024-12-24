@@ -1,0 +1,138 @@
+import pandas as pd
+from math import log2
+import numpy as np
+
+#define a class representing each node in tree
+class DecisionTreeNode:
+    def __init__(self, attribute=None, is_leaf=False, decision=None, children=None):
+        self.attribute = attribute #attribute the node slpits on
+        self.is_leaf = is_leaf 
+        self.decision = decision
+        self.children = children if children else {} #dictionary to hold child nodes
+
+# Splits data into training & testing
+def train_test_split(data, test_size=0.3):
+    
+    np.random.seed(42)
+
+    # Shuffle the dataset
+    shuffled_indices = np.random.permutation(len(data))
+
+    # Calculate the number of instances 
+    test_set_size = int(len(data) * test_size)
+
+    # split indicis to create test & training sets
+    test_indices = shuffled_indices[:test_set_size]
+    train_indices = shuffled_indices[test_set_size:]
+
+    # Makes test  & training dataframe
+    train_data = data.iloc[train_indices]
+    test_data = data.iloc[test_indices]
+
+    return train_data, test_data
+
+#to calc entropy of dataset
+def calculate_entropy(data):
+    #Count instances in each class
+    class_counts = data['class'].value_counts().to_dict()
+    total_instances = data.shape[0]
+    entropy = 0
+    #Calculate entropy
+    for count in class_counts.values():
+        probability = count / total_instances
+        entropy -= probability * log2(probability)
+    return entropy
+
+#calcs entropy for split dataset based on attribute
+def calculate_entropy_of_split(data, attribute):
+    #count instances of each value
+    value_counts = data[attribute].value_counts().to_dict()
+    total_instances = data.shape[0]
+    attribute_entropy = 0
+    #calc weighted entropy
+    for value, count in value_counts.items():
+        subset = data[data[attribute] == value]
+        subset_entropy = calculate_entropy(subset)
+        weight = count / total_instances
+        attribute_entropy += weight * subset_entropy
+    return attribute_entropy
+
+def calculate_information_gain(data, attribute, base_entropy):
+    entropy_of_split = calculate_entropy_of_split(data, attribute)
+    information_gain = base_entropy - entropy_of_split
+    return information_gain
+
+def build_decision_tree(data, attributes, target_attribute='class'):
+    if len(data[target_attribute].unique()) == 1:
+        return DecisionTreeNode(is_leaf=True, decision=data[target_attribute].iloc[0])
+    if not attributes:
+        common_class = data[target_attribute].mode()[0]
+        return DecisionTreeNode(is_leaf=True, decision=common_class)
+    base_entropy = calculate_entropy(data)
+    information_gains = {attr: calculate_information_gain(
+        data, attr, base_entropy) for attr in attributes}
+    best_attribute = max(information_gains, key=information_gains.get)
+    node = DecisionTreeNode(attribute=best_attribute)
+    remaining_attributes = attributes[:]
+    remaining_attributes.remove(best_attribute)
+    for value in data[best_attribute].unique():
+        subset = data[data[best_attribute] == value]
+        if subset.empty:
+            common_class = data[target_attribute].mode()[0]
+            child_node = DecisionTreeNode(is_leaf=True, decision=common_class)
+        else:
+            child_node = build_decision_tree(subset, remaining_attributes)
+        node.children[value] = child_node
+    return node
+
+def print_tree(node, depth=0, indent=4):
+    indent_space = ' ' * indent * depth
+    if node.is_leaf:
+        print(f"{indent_space}Leaf: {node.decision}")
+    else:
+        print(f"{indent_space}{node.attribute}")
+        for value, child in node.children.items():
+            print(f"{indent_space}{indent * ' '}{value} ->", end=" ")
+            print_tree(child, depth + 1, indent)
+
+def predict(instance, node):
+    if node.is_leaf:
+        return node.decision
+    attribute_value = instance[node.attribute]
+    if attribute_value in node.children:
+        return predict(instance, node.children[attribute_value])
+    else:
+        return None  
+
+data = pd.read_csv('/Users/salahsamara/data/car.csv')
+
+data.columns = ['buying', 'maint', 'doors',
+                'persons', 'lug_boot', 'safety', 'class']
+
+train_data, test_data = train_test_split(data, test_size=0.3)
+
+
+
+
+
+# Attributes list, assuming 'class' is the target attribute
+attributes_list = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety']
+
+# Build the decision tree
+decision_tree = build_decision_tree(data, attributes_list)
+
+print_tree(decision_tree)
+
+
+
+# Attributes list
+attributes_list = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety']
+
+# the decision tree
+decision_tree = build_decision_tree(data, attributes_list)
+
+print_tree(decision_tree)
+
+test_instance = {'buying': 'low', 'maint': 'low', 'doors': '2', 'persons': 'more', 'lug_boot': 'big', 'safety': 'high'}
+print(predict(test_instance, decision_tree))
+
